@@ -28,7 +28,8 @@
             "environments": "environments",
             "datasets": "datasets",
             "schemas": "schemas",
-            "quality_rules": "quality_rules"
+            "quality_rules": "quality_rules",
+            "dataset_registry": "datasets/datasets.json"
         },
         "monitoring": {
             "pipeline_audit": "pipeline_audit",
