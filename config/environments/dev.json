@@ -1,0 +1,53 @@
+{
+    "environment": "dev",
+    "project": "nyctaxi",
+    "azure": {
+        "resource_group": "rg-nyctaxi-dev",
+        "synapse": {
+            "workspace_name": "syn-nyctaxi-dev-001",
+            "spark_pool": "sparkdev",
+            "sql_pool": "Built-in",
+            "linked_service": "ls_adls_gen2"
+        },
+        "storage": {
+            "account_name": "stnyctaxidev001",
+            "endpoint_suffix": "dfs.core.windows.net",
+            "containers": {
+                "workspace": "workspace",
+                "landing": "landing",
+                "bronze": "bronze",
+                "silver": "silver",
+                "gold": "gold",
+                "config": "config",
+                "monitoring": "monitoring"
+            }
+        }
+    },
+    "paths": {
+        "config": {
+            "environments": "environments",
+            "datasets": "datasets",
+            "schemas": "schemas",
+            "quality_rules": "quality_rules"
+        },
+        "monitoring": {
+            "pipeline_audit": "pipeline_audit",
+            "ingestion_manifest": "ingestion_manifest",
+            "data_quality": "data_quality",
+            "watermarks": "watermarks",
+            "quarantine": "quarantine"
+        },
+        "gold": {
+            "facts": "facts",
+            "dimensions": "dimensions",
+            "aggregations": "aggregations",
+            "serving": "serving"
+        }
+    },
+    "processing": {
+        "timezone": "UTC",
+        "silver_format": "delta",
+        "gold_format": "delta",
+        "serving_format": "parquet"
+    }
+}
