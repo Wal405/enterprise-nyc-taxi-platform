@@ -1,0 +1,145 @@
+{
+	"name": "nb_common_utils",
+	"properties": {
+		"folder": {
+			"name": "utils"
+		},
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "sparkdev",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "97bf514e-94be-44ed-93bd-39e5c84d4224"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"enableDebugMode": false,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "Synapse PySpark"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/bfb3ee8b-3a87-4110-ab4d-946085af8a42/resourceGroups/rg-nyctaxi-dev/providers/Microsoft.Synapse/workspaces/syn-nyctaxi-dev-001/bigDataPools/sparkdev",
+				"name": "sparkdev",
+				"type": "Spark",
+				"endpoint": "https://syn-nyctaxi-dev-001.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkdev",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net"
+				},
+				"sparkVersion": "3.5",
+				"nodeCount": 3,
+				"cores": 4,
+				"memory": 28,
+				"automaticScaleJobs": false
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "code",
+				"source": [
+					"import json\n",
+					"from fnmatch import fnmatchcase\n",
+					"from notebookutils import mssparkutils"
+				],
+				"execution_count": 11
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"def load_config(uri):\n",
+					"    directory, filename = uri.rsplit(\"/\", 1)\n",
+					"\n",
+					"    file = next(\n",
+					"        f for f in mssparkutils.fs.ls(directory)\n",
+					"        if f.isFile and f.name == filename\n",
+					"    )\n",
+					"\n",
+					"    return json.loads(mssparkutils.fs.head(uri, file.size))"
+				],
+				"execution_count": 12
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"def build_storage_path(config, layer, relative_path=\"\"):\n",
+					"    storage = config[\"azure\"][\"storage\"]\n",
+					"\n",
+					"    account = storage[\"account_name\"]\n",
+					"    endpoint = storage[\"endpoint_suffix\"]\n",
+					"    container = storage[\"containers\"][layer]\n",
+					"\n",
+					"    return f\"abfss://{container}@{account}.{endpoint}/{relative_path.lstrip('/')}\""
+				],
+				"execution_count": 13
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"def load_datasets(config):\n",
+					"    uri = build_storage_path(\n",
+					"        config,\n",
+					"        \"config\",\n",
+					"        config[\"paths\"][\"config\"][\"dataset_registry\"]\n",
+					"    )\n",
+					"\n",
+					"    return [\n",
+					"        d for d in load_config(uri)[\"datasets\"]\n",
+					"        if d[\"enabled\"]\n",
+					"    ]"
+				],
+				"execution_count": 14
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"def discover_source_files(config, dataset):\n",
+					"    source = dataset[\"source\"]\n",
+					"\n",
+					"    path = build_storage_path(\n",
+					"        config,\n",
+					"        source[\"layer\"],\n",
+					"        source[\"directory\"]\n",
+					"    )\n",
+					"\n",
+					"    return [\n",
+					"        f for f in mssparkutils.fs.ls(path)\n",
+					"        if f.isFile and fnmatchcase(f.name, source[\"file_pattern\"])\n",
+					"    ]"
+				],
+				"execution_count": 15
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"def read_source_file(spark, dataset, path):\n",
+					"    source = dataset[\"source\"]\n",
+					"\n",
+					"    return (\n",
+					"        spark.read\n",
+					"        .format(source[\"format\"])\n",
+					"        .options(**source[\"options\"])\n",
+					"        .load(path)\n",
+					"    )"
+				],
+				"execution_count": 16
+			}
+		]
+	}
+}
