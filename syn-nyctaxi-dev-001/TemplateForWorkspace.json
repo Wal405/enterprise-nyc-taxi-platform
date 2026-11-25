@@ -1,0 +1,1614 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"workspaceName": {
+			"type": "string",
+			"metadata": "Workspace name",
+			"defaultValue": "syn-nyctaxi-dev-001"
+		},
+		"ls_adls_gen2_accountKey": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accountKey' of 'ls_adls_gen2'"
+		},
+		"syn-nyctaxi-dev-001-WorkspaceDefaultSqlServer_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'syn-nyctaxi-dev-001-WorkspaceDefaultSqlServer'",
+			"defaultValue": "Integrated Security=False;Encrypt=True;Connection Timeout=30;Data Source=tcp:syn-nyctaxi-dev-001.sql.azuresynapse.net,1433;Initial Catalog=@{linkedService().DBName}"
+		},
+		"ls_adls_gen2_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "@{concat('https://', linkedService().storage_account_name, '.dfs.core.windows.net')}"
+		},
+		"syn-nyctaxi-dev-001-WorkspaceDefaultStorage_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://stnyctaxidev001.dfs.core.windows.net"
+		}
+	},
+	"variables": {
+		"workspaceId": "[concat('Microsoft.Synapse/workspaces/', parameters('workspaceName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('workspaceName'), '/pl_ingest_file')]",
+			"type": "Microsoft.Synapse/workspaces/pipelines",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"activities": [
+					{
+						"name": "cpy_landing_to_bronze",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "BinarySource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true
+								},
+								"formatSettings": {
+									"type": "BinaryReadSettings"
+								}
+							},
+							"sink": {
+								"type": "BinarySink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								}
+							},
+							"enableStaging": false
+						},
+						"inputs": [
+							{
+								"referenceName": "ds_adls_binary",
+								"type": "DatasetReference",
+								"parameters": {
+									"storage_account_name": {
+										"value": "@pipeline().parameters.file_info.storage_account_name",
+										"type": "Expression"
+									},
+									"container": {
+										"value": "@pipeline().parameters.file_info.source_container",
+										"type": "Expression"
+									},
+									"directory": {
+										"value": "@pipeline().parameters.file_info.source_directory",
+										"type": "Expression"
+									},
+									"file_name": {
+										"value": "@pipeline().parameters.file_info.file_name",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "ds_adls_binary",
+								"type": "DatasetReference",
+								"parameters": {
+									"storage_account_name": "@pipeline().parameters.file_info.storage_account_name",
+									"container": "@pipeline().parameters.file_info.target_container",
+									"directory": {
+										"value": "@pipeline().parameters.file_info.target_directory",
+										"type": "Expression"
+									},
+									"file_name": {
+										"value": "@pipeline().parameters.file_info.file_name",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"file_info": {
+						"type": "object"
+					}
+				},
+				"folder": {
+					"name": "bronze"
+				},
+				"annotations": []
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/datasets/ds_adls_binary')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/ds_adls_binary')]",
+			"type": "Microsoft.Synapse/workspaces/datasets",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_adls_gen2",
+					"type": "LinkedServiceReference",
+					"parameters": {
+						"storage_account_name": {
+							"value": "@dataset().storage_account_name",
+							"type": "Expression"
+						}
+					}
+				},
+				"parameters": {
+					"storage_account_name": {
+						"type": "String"
+					},
+					"container": {
+						"type": "String"
+					},
+					"directory": {
+						"type": "String"
+					},
+					"file_name": {
+						"type": "String"
+					}
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@dataset().file_name",
+							"type": "Expression"
+						},
+						"folderPath": {
+							"value": "@dataset().directory",
+							"type": "Expression"
+						},
+						"fileSystem": {
+							"value": "@dataset().container",
+							"type": "Expression"
+						}
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/linkedServices/ls_adls_gen2')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/ls_adls_gen2')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"parameters": {
+					"storage_account_name": {
+						"type": "String"
+					}
+				},
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('ls_adls_gen2_properties_typeProperties_url')]",
+					"accountKey": {
+						"type": "SecureString",
+						"value": "[parameters('ls_adls_gen2_accountKey')]"
+					}
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/syn-nyctaxi-dev-001-WorkspaceDefaultSqlServer')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"parameters": {
+					"DBName": {
+						"type": "String"
+					}
+				},
+				"annotations": [],
+				"type": "AzureSqlDW",
+				"typeProperties": {
+					"connectionString": "[parameters('syn-nyctaxi-dev-001-WorkspaceDefaultSqlServer_connectionString')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/syn-nyctaxi-dev-001-WorkspaceDefaultStorage')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('syn-nyctaxi-dev-001-WorkspaceDefaultStorage_properties_typeProperties_url')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/AutoResolveIntegrationRuntime')]",
+			"type": "Microsoft.Synapse/workspaces/integrationRuntimes",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "Managed",
+				"typeProperties": {
+					"computeProperties": {
+						"location": "AutoResolve",
+						"dataFlowProperties": {
+							"computeType": "General",
+							"coreCount": 8,
+							"timeToLive": 0
+						}
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/WorkspaceSystemIdentity')]",
+			"type": "Microsoft.Synapse/workspaces/credentials",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "ManagedIdentity",
+				"typeProperties": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/nb_01_validate_config')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"folder": {
+					"name": "setup"
+				},
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "sparkdev",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "d47c78bb-1fee-4940-a23b-270355a9e844"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"enableDebugMode": false,
+					"kernelspec": {
+						"name": "synapse_pyspark",
+						"display_name": "Synapse PySpark"
+					},
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/bfb3ee8b-3a87-4110-ab4d-946085af8a42/resourceGroups/rg-nyctaxi-dev/providers/Microsoft.Synapse/workspaces/syn-nyctaxi-dev-001/bigDataPools/sparkdev",
+						"name": "sparkdev",
+						"type": "Spark",
+						"endpoint": "https://syn-nyctaxi-dev-001.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkdev",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net"
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 3,
+						"cores": 4,
+						"memory": 28
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "code",
+						"metadata": {
+							"tags": []
+						},
+						"source": [
+							"config_uri = \"abfss://config@stnyctaxidev001.dfs.core.windows.net/environments/dev.json\""
+						],
+						"outputs": [],
+						"execution_count": 1
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"import json\n",
+							"\n",
+							"from fnmatch import fnmatchcase\n",
+							"from notebookutils import mssparkutils\n",
+							"from pyspark.sql import functions as F"
+						],
+						"outputs": [],
+						"execution_count": 2
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"def load_config(uri):\n",
+							"    \"\"\"Load and parse a JSON configuration file.\"\"\"\n",
+							"\n",
+							"    if not uri or not uri.strip():\n",
+							"        raise ValueError(\"Configuration URI is required.\")\n",
+							"\n",
+							"    directory, filename = uri.rsplit(\"/\", 1)\n",
+							"\n",
+							"    entries = mssparkutils.fs.ls(directory)\n",
+							"\n",
+							"    matches = [\n",
+							"        entry\n",
+							"        for entry in entries\n",
+							"        if entry.isFile and entry.name == filename\n",
+							"    ]\n",
+							"\n",
+							"    if len(matches) != 1:\n",
+							"        raise FileNotFoundError(\n",
+							"            f\"Configuration file not found: {uri}\"\n",
+							"        )\n",
+							"\n",
+							"    content = mssparkutils.fs.head(\n",
+							"        uri,\n",
+							"        matches[0].size\n",
+							"    )\n",
+							"\n",
+							"    config = json.loads(content)\n",
+							"\n",
+							"    if not isinstance(config, dict):\n",
+							"        raise ValueError(\n",
+							"            f\"Invalid configuration structure: {uri}\"\n",
+							"        )\n",
+							"\n",
+							"    return config"
+						],
+						"outputs": [],
+						"execution_count": 3
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"config = load_config(config_uri)\n",
+							"\n",
+							"required_sections = {\n",
+							"    \"environment\",\n",
+							"    \"project\",\n",
+							"    \"azure\",\n",
+							"    \"paths\",\n",
+							"    \"processing\"\n",
+							"}\n",
+							"\n",
+							"missing_sections = required_sections.difference(config)\n",
+							"\n",
+							"if missing_sections:\n",
+							"    raise ValueError(\n",
+							"        f\"Missing configuration sections: {missing_sections}\"\n",
+							"    )\n",
+							"\n",
+							"storage_config = config[\"azure\"][\"storage\"]\n",
+							"\n",
+							"required_storage_fields = {\n",
+							"    \"account_name\",\n",
+							"    \"endpoint_suffix\",\n",
+							"    \"containers\"\n",
+							"}\n",
+							"\n",
+							"missing_fields = required_storage_fields.difference(\n",
+							"    storage_config\n",
+							")\n",
+							"\n",
+							"if missing_fields:\n",
+							"    raise ValueError(\n",
+							"        f\"Missing storage fields: {missing_fields}\"\n",
+							"    )\n",
+							"\n",
+							"if not storage_config[\"containers\"]:\n",
+							"    raise ValueError(\"No storage containers configured.\")\n",
+							"\n",
+							"print(\"PASS: Environment configuration loaded.\")\n",
+							"print(f\"Environment: {config['environment']}\")\n",
+							"print(f\"Project: {config['project']}\")\n",
+							"print(f\"Storage account: {storage_config['account_name']}\")"
+						],
+						"outputs": [],
+						"execution_count": 4
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"def build_storage_path(config, layer, relative_path=\"\"):\n",
+							"    \"\"\"Construct an ADLS Gen2 URI dynamically.\"\"\"\n",
+							"\n",
+							"    storage = config[\"azure\"][\"storage\"]\n",
+							"\n",
+							"    if layer not in storage[\"containers\"]:\n",
+							"        raise ValueError(\n",
+							"            f\"Unknown storage layer: {layer}\"\n",
+							"        )\n",
+							"\n",
+							"    account = storage[\"account_name\"]\n",
+							"    endpoint = storage[\"endpoint_suffix\"]\n",
+							"    container = storage[\"containers\"][layer]\n",
+							"\n",
+							"    root = f\"abfss://{container}@{account}.{endpoint}\"\n",
+							"\n",
+							"    return f\"{root}/{relative_path.lstrip('/')}\""
+						],
+						"outputs": [],
+						"execution_count": 5
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"collapsed": false
+						},
+						"source": [
+							"container_results = []\n",
+							"\n",
+							"for layer in storage_config[\"containers\"]:\n",
+							"\n",
+							"    path = build_storage_path(config, layer)\n",
+							"\n",
+							"    try:\n",
+							"\n",
+							"        entries = mssparkutils.fs.ls(path)\n",
+							"\n",
+							"        container_results.append({\n",
+							"            \"layer\": layer,\n",
+							"            \"path\": path,\n",
+							"            \"entries\": len(entries),\n",
+							"            \"status\": \"PASS\",\n",
+							"            \"error\": \"\"\n",
+							"        })\n",
+							"\n",
+							"    except Exception as exc:\n",
+							"\n",
+							"        container_results.append({\n",
+							"            \"layer\": layer,\n",
+							"            \"path\": path,\n",
+							"            \"entries\": 0,\n",
+							"            \"status\": \"FAIL\",\n",
+							"            \"error\": str(exc)\n",
+							"        })\n",
+							"\n",
+							"container_validation_df = spark.createDataFrame(\n",
+							"    container_results\n",
+							")\n",
+							"\n",
+							"display(container_validation_df)"
+						],
+						"outputs": [],
+						"execution_count": 6
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"dataset_registry_uri = build_storage_path(\n",
+							"    config,\n",
+							"    \"config\",\n",
+							"    config[\"paths\"][\"config\"][\"dataset_registry\"]\n",
+							")\n",
+							"\n",
+							"dataset_registry = load_config(dataset_registry_uri)\n",
+							"\n",
+							"datasets = [\n",
+							"    dataset\n",
+							"    for dataset in dataset_registry[\"datasets\"]\n",
+							"    if dataset[\"enabled\"]\n",
+							"]\n",
+							"\n",
+							"if not datasets:\n",
+							"    raise ValueError(\"No enabled datasets found.\")\n",
+							"\n",
+							"print(f\"Registry URI: {dataset_registry_uri}\")\n",
+							"print(f\"Registry version: {dataset_registry['version']}\")\n",
+							"print(f\"Enabled datasets: {len(datasets)}\")\n",
+							"\n",
+							"for dataset in datasets:\n",
+							"    print(f\"Dataset: {dataset['dataset_id']}\")\n",
+							"\n",
+							"print(\"PASS: Dataset registry loaded.\")"
+						],
+						"outputs": [],
+						"execution_count": 7
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"dataset_ids = [\n",
+							"    dataset[\"dataset_id\"]\n",
+							"    for dataset in datasets\n",
+							"]\n",
+							"\n",
+							"if len(dataset_ids) != len(set(dataset_ids)):\n",
+							"    raise ValueError(\"Duplicate dataset identifiers found.\")\n",
+							"\n",
+							"required_fields = {\n",
+							"    \"source\": {\n",
+							"        \"layer\",\n",
+							"        \"directory\",\n",
+							"        \"file_pattern\",\n",
+							"        \"format\",\n",
+							"        \"options\"\n",
+							"    },\n",
+							"    \"target\": {\n",
+							"        \"layer\",\n",
+							"        \"directory\"\n",
+							"    },\n",
+							"    \"ingestion\": {\n",
+							"        \"mode\",\n",
+							"        \"strategy\"\n",
+							"    }\n",
+							"}\n",
+							"\n",
+							"for dataset in datasets:\n",
+							"\n",
+							"    dataset_id = dataset[\"dataset_id\"]\n",
+							"\n",
+							"    for section, fields in required_fields.items():\n",
+							"\n",
+							"        missing_fields = fields.difference(\n",
+							"            dataset.get(section, {})\n",
+							"        )\n",
+							"\n",
+							"        if missing_fields:\n",
+							"            raise ValueError(\n",
+							"                f\"{dataset_id}: Missing fields in \"\n",
+							"                f\"{section}: {missing_fields}\"\n",
+							"            )\n",
+							"\n",
+							"    for section in (\"source\", \"target\"):\n",
+							"\n",
+							"        layer = dataset[section][\"layer\"]\n",
+							"\n",
+							"        if layer not in storage_config[\"containers\"]:\n",
+							"            raise ValueError(\n",
+							"                f\"{dataset_id}: Unknown layer {layer}\"\n",
+							"            )\n",
+							"\n",
+							"    print(f\"PASS: Metadata validated for {dataset_id}\")\n",
+							"\n",
+							"print(\"PASS: All enabled dataset definitions validated.\")"
+						],
+						"outputs": [],
+						"execution_count": 8
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"collapsed": false
+						},
+						"source": [
+							"def discover_source_files(config, dataset):\n",
+							"    \"\"\"Discover files using configured dataset metadata.\"\"\"\n",
+							"\n",
+							"    source = dataset[\"source\"]\n",
+							"\n",
+							"    source_path = build_storage_path(\n",
+							"        config,\n",
+							"        source[\"layer\"],\n",
+							"        source[\"directory\"]\n",
+							"    )\n",
+							"    entries = mssparkutils.fs.ls(source_path)\n",
+							"    return sorted(\n",
+							"        [\n",
+							"            entry\n",
+							"            for entry in entries\n",
+							"            if entry.isFile\n",
+							"            and fnmatchcase(\n",
+							"                entry.name,\n",
+							"                source[\"file_pattern\"]\n",
+							"            )\n",
+							"        ],\n",
+							"        key=lambda entry: entry.name\n",
+							"    )\n",
+							"\n",
+							"\n",
+							"source_results = []\n",
+							"file_inventory = []\n",
+							"\n",
+							"for dataset in datasets:\n",
+							"\n",
+							"    dataset_id = dataset[\"dataset_id\"]\n",
+							"\n",
+							"    try:\n",
+							"\n",
+							"        files = discover_source_files(config, dataset)\n",
+							"\n",
+							"        source_results.append({\n",
+							"            \"dataset_id\": dataset_id,\n",
+							"            \"file_format\": dataset[\"source\"][\"format\"],\n",
+							"            \"file_count\": len(files),\n",
+							"            \"total_bytes\": sum(file.size for file in files),\n",
+							"            \"status\": \"PASS\" if files else \"FAIL\",\n",
+							"            \"error\": \"\" if files else \"No matching files found\"\n",
+							"        })\n",
+							"\n",
+							"        for file in files:\n",
+							"\n",
+							"            file_inventory.append({\n",
+							"                \"dataset_id\": dataset_id,\n",
+							"                \"file_name\": file.name,\n",
+							"                \"file_path\": file.path,\n",
+							"                \"file_size_bytes\": file.size\n",
+							"            })\n",
+							"\n",
+							"    except Exception as exc:\n",
+							"\n",
+							"        source_results.append({\n",
+							"            \"dataset_id\": dataset_id,\n",
+							"            \"file_format\": dataset[\"source\"][\"format\"],\n",
+							"            \"file_count\": 0,\n",
+							"            \"total_bytes\": 0,\n",
+							"            \"status\": \"FAIL\",\n",
+							"            \"error\": str(exc)\n",
+							"        })\n",
+							"\n",
+							"\n",
+							"display(spark.createDataFrame(source_results))\n",
+							"\n",
+							"if file_inventory:\n",
+							"\n",
+							"    inventory_df = spark.createDataFrame(file_inventory)\n",
+							"\n",
+							"    inventory_df = inventory_df.withColumn(\n",
+							"        \"file_size_mb\",\n",
+							"        F.round(\n",
+							"            F.col(\"file_size_bytes\") / (1024 ** 2),\n",
+							"            2\n",
+							"        )\n",
+							"    )\n",
+							"\n",
+							"    display(\n",
+							"        inventory_df.orderBy(\n",
+							"            \"dataset_id\",\n",
+							"            \"file_name\"\n",
+							"        )\n",
+							"    )"
+						],
+						"outputs": [],
+						"execution_count": 9
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"failed_containers = [\n",
+							"    result[\"layer\"]\n",
+							"    for result in container_results\n",
+							"    if result[\"status\"] == \"FAIL\"\n",
+							"]\n",
+							"\n",
+							"failed_datasets = [\n",
+							"    result[\"dataset_id\"]\n",
+							"    for result in source_results\n",
+							"    if result[\"status\"] == \"FAIL\"\n",
+							"]\n",
+							"\n",
+							"print(\"=\" * 55)\n",
+							"print(\"INFRASTRUCTURE VALIDATION SUMMARY\")\n",
+							"print(\"=\" * 55)\n",
+							"\n",
+							"print(f\"Environment: {config['environment']}\")\n",
+							"print(f\"Project: {config['project']}\")\n",
+							"print(f\"Spark version: {spark.version}\")\n",
+							"\n",
+							"print(f\"Containers checked: {len(container_results)}\")\n",
+							"print(f\"Containers failed: {len(failed_containers)}\")\n",
+							"\n",
+							"print(f\"Datasets checked: {len(source_results)}\")\n",
+							"print(f\"Datasets failed: {len(failed_datasets)}\")\n",
+							"\n",
+							"print(f\"Source files discovered: {len(file_inventory)}\")\n",
+							"\n",
+							"print(\"=\" * 55)\n",
+							"\n",
+							"if failed_containers or failed_datasets:\n",
+							"\n",
+							"    raise RuntimeError(\n",
+							"        f\"Infrastructure validation failed. \"\n",
+							"        f\"Containers: {failed_containers}, \"\n",
+							"        f\"Datasets: {failed_datasets}\"\n",
+							"    )\n",
+							"\n",
+							"print(\"PASS: Environment configuration validated.\")\n",
+							"print(\"PASS: Dataset registry validated.\")\n",
+							"print(\"PASS: All configured containers accessible.\")\n",
+							"print(\"PASS: All enabled datasets have source files.\")\n",
+							"print(\"PASS: Spark infrastructure validation completed.\")"
+						],
+						"outputs": [],
+						"execution_count": 10
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							""
+						],
+						"outputs": [],
+						"execution_count": null
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/nb_02_source_profiling')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"folder": {
+					"name": "profiling"
+				},
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "sparkdev",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "d3e7cf91-c3bd-4f0d-bb1b-f4ff3b979996"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"enableDebugMode": true,
+					"kernelspec": {
+						"name": "synapse_pyspark",
+						"display_name": "Synapse PySpark"
+					},
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/bfb3ee8b-3a87-4110-ab4d-946085af8a42/resourceGroups/rg-nyctaxi-dev/providers/Microsoft.Synapse/workspaces/syn-nyctaxi-dev-001/bigDataPools/sparkdev",
+						"name": "sparkdev",
+						"type": "Spark",
+						"endpoint": "https://syn-nyctaxi-dev-001.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkdev",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net"
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 3,
+						"cores": 4,
+						"memory": 28
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "code",
+						"source": [
+							"config_uri = \"abfss://config@stnyctaxidev001.dfs.core.windows.net/environments/dev.json\""
+						],
+						"outputs": [],
+						"execution_count": 1
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"%run /utils/nb_common_utils"
+						],
+						"outputs": [],
+						"execution_count": 42
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"config = load_config(config_uri)\n",
+							"datasets = load_datasets(config)"
+						],
+						"outputs": [],
+						"execution_count": 43
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"collapsed": false
+						},
+						"source": [
+							"source_inventory = []\n",
+							"\n",
+							"for dataset in datasets:\n",
+							"\n",
+							"    files = discover_source_files(\n",
+							"        config,\n",
+							"        dataset\n",
+							"    )\n",
+							"\n",
+							"    if not files:\n",
+							"        raise FileNotFoundError(\n",
+							"            f\"No files found for {dataset['dataset_id']}\"\n",
+							"        )\n",
+							"\n",
+							"    for file in files:\n",
+							"\n",
+							"        source_inventory.append({\n",
+							"            \"dataset_id\": dataset[\"dataset_id\"],\n",
+							"            \"file_name\": file.name,\n",
+							"            \"file_path\": file.path,\n",
+							"            \"file_size_bytes\": file.size,\n",
+							"            \"file_format\": dataset[\"source\"][\"format\"]\n",
+							"        })\n",
+							"\n",
+							"inventory_df = spark.createDataFrame(source_inventory)\n",
+							"\n",
+							"display(inventory_df)"
+						],
+						"outputs": [],
+						"execution_count": 29
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"collapsed": false
+						},
+						"source": [
+							"file_profiles = []\n",
+							"schema_profiles = []\n",
+							"\n",
+							"dataset_lookup = {\n",
+							"    dataset[\"dataset_id\"]: dataset\n",
+							"    for dataset in datasets\n",
+							"}\n",
+							"\n",
+							"for file in source_inventory:\n",
+							"\n",
+							"    dataset = dataset_lookup[file[\"dataset_id\"]]\n",
+							"\n",
+							"    df = read_source_file(\n",
+							"        spark,\n",
+							"        dataset,\n",
+							"        file[\"file_path\"]\n",
+							"    )\n",
+							"\n",
+							"    row_count = df.count()\n",
+							"\n",
+							"    file_profiles.append({\n",
+							"        \"dataset_id\": file[\"dataset_id\"],\n",
+							"        \"file_name\": file[\"file_name\"],\n",
+							"        \"file_format\": file[\"file_format\"],\n",
+							"        \"file_size_bytes\": file[\"file_size_bytes\"],\n",
+							"        \"row_count\": row_count,\n",
+							"        \"column_count\": len(df.columns)\n",
+							"    })\n",
+							"\n",
+							"    for field in df.schema.fields:\n",
+							"\n",
+							"        schema_profiles.append({\n",
+							"            \"dataset_id\": file[\"dataset_id\"],\n",
+							"            \"file_name\": file[\"file_name\"],\n",
+							"            \"column_name\": field.name,\n",
+							"            \"data_type\": field.dataType.simpleString(),\n",
+							"            \"nullable\": field.nullable\n",
+							"        })\n",
+							"\n",
+							"file_profile_df = spark.createDataFrame(file_profiles)\n",
+							"\n",
+							"schema_profile_df = spark.createDataFrame(schema_profiles)\n",
+							"\n",
+							"display(file_profile_df)\n",
+							"\n",
+							"display(schema_profile_df)"
+						],
+						"outputs": [],
+						"execution_count": 30
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"collapsed": false
+						},
+						"source": [
+							"from pyspark.sql import functions as F\n",
+							"\n",
+							"dataset_summary_df = (\n",
+							"    file_profile_df\n",
+							"    .groupBy(\"dataset_id\")\n",
+							"    .agg(\n",
+							"        F.count(\"*\").alias(\"total_files\"),\n",
+							"        F.sum(\"row_count\").alias(\"total_records\"),\n",
+							"        F.sum(\"file_size_bytes\").alias(\"total_bytes\")\n",
+							"    )\n",
+							"    .withColumn(\n",
+							"        \"total_size_mb\",\n",
+							"        F.round(\n",
+							"            F.col(\"total_bytes\") / (1024 ** 2),\n",
+							"            2\n",
+							"        )\n",
+							"    )\n",
+							")\n",
+							"\n",
+							"display(dataset_summary_df)"
+						],
+						"outputs": [],
+						"execution_count": 31
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"for dataset in datasets:\n",
+							"    for file in discover_source_files(config, dataset):\n",
+							"        df = read_source_file(spark, dataset, file.path)\n",
+							"\n",
+							"        nulls = df.agg(*[\n",
+							"            F.count(F.when(F.col(c).isNull(), 1)).alias(c)\n",
+							"            for c in df.columns\n",
+							"        ]).first().asDict()\n",
+							"\n",
+							"        print(file.name, {k: v for k, v in nulls.items() if v > 0})"
+						],
+						"outputs": [],
+						"execution_count": 36
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"collapsed": false
+						},
+						"source": [
+							"for dataset in datasets:\n",
+							"    file = discover_source_files(config, dataset)[0]\n",
+							"    df = read_source_file(spark, dataset, file.path)\n",
+							"\n",
+							"    print(dataset[\"dataset_id\"])\n",
+							"    print(df.schema.json())"
+						],
+						"outputs": [],
+						"execution_count": 38
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"for dataset in datasets:\n",
+							"    expected = load_schema(config, dataset)\n",
+							"\n",
+							"    for file in discover_source_files(config, dataset):\n",
+							"        actual = read_source_file(spark, dataset, file.path).schema\n",
+							"\n",
+							"        assert actual == expected, f\"Schema mismatch: {file.name}\"\n",
+							"\n",
+							"    print(f\"PASS: {dataset['dataset_id']}\")"
+						],
+						"outputs": [],
+						"execution_count": 44
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/nb_03_initialize_control_tables')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"folder": {
+					"name": "setup"
+				},
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "sparkdev",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "9f0668cf-21a7-4dcc-a0bc-f5abccdfa17c"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"enableDebugMode": true,
+					"kernelspec": {
+						"name": "synapse_pyspark",
+						"display_name": "Synapse PySpark"
+					},
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/bfb3ee8b-3a87-4110-ab4d-946085af8a42/resourceGroups/rg-nyctaxi-dev/providers/Microsoft.Synapse/workspaces/syn-nyctaxi-dev-001/bigDataPools/sparkdev",
+						"name": "sparkdev",
+						"type": "Spark",
+						"endpoint": "https://syn-nyctaxi-dev-001.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkdev",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net"
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 3,
+						"cores": 4,
+						"memory": 28
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "code",
+						"source": [
+							"config_uri = \"abfss://config@stnyctaxidev001.dfs.core.windows.net/environments/dev.json\""
+						],
+						"outputs": [],
+						"execution_count": 45
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"config = load_config(config_uri)\n",
+							"\n",
+							"manifest_path = build_storage_path(\n",
+							"    config,\n",
+							"    \"monitoring\",\n",
+							"    config[\"paths\"][\"monitoring\"][\"ingestion_manifest\"]\n",
+							")\n",
+							"\n",
+							"schema_path = build_storage_path(\n",
+							"    config,\n",
+							"    \"config\",\n",
+							"    config[\"paths\"][\"config\"][\"manifest_schema\"]\n",
+							")\n",
+							"\n",
+							"manifest_schema = StructType.fromJson(load_config(schema_path))"
+						],
+						"outputs": [],
+						"execution_count": 46
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"from delta.tables import DeltaTable\n",
+							"\n",
+							"if not DeltaTable.isDeltaTable(spark, manifest_path):\n",
+							"    (\n",
+							"        spark.createDataFrame([], manifest_schema)\n",
+							"        .write\n",
+							"        .format(\"delta\")\n",
+							"        .mode(\"errorifexists\")\n",
+							"        .save(manifest_path)\n",
+							"    )"
+						],
+						"outputs": [],
+						"execution_count": 47
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"manifest_df = spark.read.format(\"delta\").load(manifest_path)\n",
+							"\n",
+							"manifest_df.printSchema()\n",
+							"\n",
+							"print(\"Total records:\", manifest_df.count())"
+						],
+						"outputs": [],
+						"execution_count": 48
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/nb_common_utils')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"folder": {
+					"name": "utils"
+				},
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "sparkdev",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "0e7c07ed-efa4-4cb9-bce9-98ff722d3586"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"enableDebugMode": true,
+					"kernelspec": {
+						"name": "synapse_pyspark",
+						"display_name": "Synapse PySpark"
+					},
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/bfb3ee8b-3a87-4110-ab4d-946085af8a42/resourceGroups/rg-nyctaxi-dev/providers/Microsoft.Synapse/workspaces/syn-nyctaxi-dev-001/bigDataPools/sparkdev",
+						"name": "sparkdev",
+						"type": "Spark",
+						"endpoint": "https://syn-nyctaxi-dev-001.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkdev",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net"
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 3,
+						"cores": 4,
+						"memory": 28
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "code",
+						"source": [
+							"import json\n",
+							"from fnmatch import fnmatchcase\n",
+							"from notebookutils import mssparkutils"
+						],
+						"outputs": [],
+						"execution_count": 52
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"def load_config(uri):\n",
+							"    directory, filename = uri.rsplit(\"/\", 1)\n",
+							"\n",
+							"    file = next(\n",
+							"        f for f in mssparkutils.fs.ls(directory)\n",
+							"        if f.isFile and f.name == filename\n",
+							"    )\n",
+							"\n",
+							"    return json.loads(mssparkutils.fs.head(uri, file.size))"
+						],
+						"outputs": [],
+						"execution_count": 53
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"def build_storage_path(config, layer, relative_path=\"\"):\n",
+							"    storage = config[\"azure\"][\"storage\"]\n",
+							"\n",
+							"    account = storage[\"account_name\"]\n",
+							"    endpoint = storage[\"endpoint_suffix\"]\n",
+							"    container = storage[\"containers\"][layer]\n",
+							"\n",
+							"    return f\"abfss://{container}@{account}.{endpoint}/{relative_path.lstrip('/')}\""
+						],
+						"outputs": [],
+						"execution_count": 54
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"def load_datasets(config):\n",
+							"    uri = build_storage_path(\n",
+							"        config,\n",
+							"        \"config\",\n",
+							"        config[\"paths\"][\"config\"][\"dataset_registry\"]\n",
+							"    )\n",
+							"\n",
+							"    return [\n",
+							"        d for d in load_config(uri)[\"datasets\"]\n",
+							"        if d[\"enabled\"]\n",
+							"    ]"
+						],
+						"outputs": [],
+						"execution_count": 55
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"def discover_source_files(config, dataset):\n",
+							"    source = dataset[\"source\"]\n",
+							"\n",
+							"    path = build_storage_path(\n",
+							"        config,\n",
+							"        source[\"layer\"],\n",
+							"        source[\"directory\"]\n",
+							"    )\n",
+							"\n",
+							"    return [\n",
+							"        f for f in mssparkutils.fs.ls(path)\n",
+							"        if f.isFile and fnmatchcase(f.name, source[\"file_pattern\"])\n",
+							"    ]"
+						],
+						"outputs": [],
+						"execution_count": 56
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"def read_source_file(spark, dataset, path):\n",
+							"    source = dataset[\"source\"]\n",
+							"\n",
+							"    return (\n",
+							"        spark.read\n",
+							"        .format(source[\"format\"])\n",
+							"        .options(**source[\"options\"])\n",
+							"        .load(path)\n",
+							"    )"
+						],
+						"outputs": [],
+						"execution_count": 57
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"from pyspark.sql.types import StructType\n",
+							"\n",
+							"def load_schema(config, dataset):\n",
+							"    path = build_storage_path(\n",
+							"        config,\n",
+							"        \"config\",\n",
+							"        f\"{config['paths']['config']['schemas']}/{dataset['source']['schema_file']}\"\n",
+							"    )\n",
+							"\n",
+							"    return StructType.fromJson(load_config(path))"
+						],
+						"outputs": [],
+						"execution_count": 58
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							""
+						],
+						"outputs": [],
+						"execution_count": null
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/nb_prepare_ingestion')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"folder": {
+					"name": "bronze"
+				},
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "sparkdev",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "f188e98c-8abf-40dd-bba4-da2a5dbda841"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"enableDebugMode": true,
+					"kernelspec": {
+						"name": "synapse_pyspark",
+						"display_name": "Synapse PySpark"
+					},
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/bfb3ee8b-3a87-4110-ab4d-946085af8a42/resourceGroups/rg-nyctaxi-dev/providers/Microsoft.Synapse/workspaces/syn-nyctaxi-dev-001/bigDataPools/sparkdev",
+						"name": "sparkdev",
+						"type": "Spark",
+						"endpoint": "https://syn-nyctaxi-dev-001.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkdev",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net"
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 3,
+						"cores": 4,
+						"memory": 28,
+						"automaticScaleJobs": false
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"config_uri = \"abfss://config@stnyctaxidev001.dfs.core.windows.net/environments/dev.json\""
+						],
+						"outputs": [],
+						"execution_count": 49
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"%run /utils/nb_common_utils"
+						],
+						"outputs": [],
+						"execution_count": 61
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"config = load_config(config_uri)\n",
+							"datasets = load_datasets(config)\n",
+							"\n",
+							"spark.conf.set(\n",
+							"    \"spark.sql.session.timeZone\",\n",
+							"    config[\"processing\"][\"timezone\"]\n",
+							")"
+						],
+						"outputs": [],
+						"execution_count": 62
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"manifest_path = build_storage_path(\n",
+							"    config,\n",
+							"    \"monitoring\",\n",
+							"    config[\"paths\"][\"monitoring\"][\"ingestion_manifest\"]\n",
+							")\n",
+							"\n",
+							"manifest_df = spark.read.format(\"delta\").load(manifest_path)"
+						],
+						"outputs": [],
+						"execution_count": 63
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"collapsed": false
+						},
+						"source": [
+							"from pyspark.sql import functions as F\n",
+							"\n",
+							"source_files = [\n",
+							"    (\n",
+							"        dataset[\"dataset_id\"],\n",
+							"        file.name,\n",
+							"        file.path,\n",
+							"        file.size,\n",
+							"        file.modifyTime\n",
+							"    )\n",
+							"    for dataset in datasets\n",
+							"    for file in discover_source_files(config, dataset)\n",
+							"]\n",
+							"\n",
+							"inventory_df = spark.createDataFrame(\n",
+							"    source_files,\n",
+							"    \"\"\"\n",
+							"    dataset_id string,\n",
+							"    file_name string,\n",
+							"    source_path string,\n",
+							"    file_size_bytes long,\n",
+							"    modified_ms long\n",
+							"    \"\"\"\n",
+							").withColumn(\n",
+							"    \"last_modified\",\n",
+							"    F.timestamp_millis(\"modified_ms\")\n",
+							").drop(\"modified_ms\")\n",
+							"\n",
+							"display(inventory_df)"
+						],
+						"outputs": [],
+						"execution_count": 65
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"collapsed": false
+						},
+						"source": [
+							"inventory_df = inventory_df.withColumn(\n",
+							"    \"file_id\",\n",
+							"    F.sha2(\n",
+							"        F.to_json(\n",
+							"            F.struct(\n",
+							"                \"dataset_id\",\n",
+							"                \"source_path\",\n",
+							"                \"file_size_bytes\",\n",
+							"                \"last_modified\"\n",
+							"            )\n",
+							"        ),\n",
+							"        256\n",
+							"    )\n",
+							")\n",
+							"\n",
+							"display(inventory_df)"
+						],
+						"outputs": [],
+						"execution_count": 66
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"processed_df = (\n",
+							"    manifest_df\n",
+							"    .filter(F.col(\"status\") == \"SUCCESS\")\n",
+							"    .select(\n",
+							"        \"dataset_id\",\n",
+							"        \"source_path\",\n",
+							"        \"file_size_bytes\",\n",
+							"        \"last_modified\"\n",
+							"    )\n",
+							"    .distinct()\n",
+							")"
+						],
+						"outputs": [],
+						"execution_count": 67
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"collapsed": false
+						},
+						"source": [
+							"eligible_df = inventory_df.join(\n",
+							"    processed_df,\n",
+							"    [\n",
+							"        \"dataset_id\",\n",
+							"        \"source_path\",\n",
+							"        \"file_size_bytes\",\n",
+							"        \"last_modified\"\n",
+							"    ],\n",
+							"    \"left_anti\"\n",
+							")\n",
+							"\n",
+							"display(eligible_df)"
+						],
+						"outputs": [],
+						"execution_count": 68
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"total = inventory_df.count()\n",
+							"eligible = eligible_df.count()\n",
+							"\n",
+							"print(\"Discovered files:\", total)\n",
+							"print(\"Eligible files:\", eligible)\n",
+							"print(\"Skipped files:\", total - eligible)"
+						],
+						"outputs": [],
+						"execution_count": 69
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"dataset_lookup = {\n",
+							"    d[\"dataset_id\"]: d for d in datasets\n",
+							"}\n",
+							"\n",
+							"storage = config[\"azure\"][\"storage\"]\n",
+							"\n",
+							"work_items = []\n",
+							"\n",
+							"for row in eligible_df.collect():\n",
+							"    dataset = dataset_lookup[row.dataset_id]\n",
+							"    source = dataset[\"source\"]\n",
+							"    target = dataset[\"target\"]\n",
+							"\n",
+							"    work_items.append({\n",
+							"        \"dataset_id\": row.dataset_id,\n",
+							"        \"storage_account_name\": storage[\"account_name\"],\n",
+							"        \"source_container\": storage[\"containers\"][source[\"layer\"]],\n",
+							"        \"source_directory\": source[\"directory\"],\n",
+							"        \"target_container\": storage[\"containers\"][target[\"layer\"]],\n",
+							"        \"target_directory\": target[\"directory\"],\n",
+							"        \"file_name\": row.file_name,\n",
+							"        \"source_path\": row.source_path,\n",
+							"        \"file_size_bytes\": row.file_size_bytes,\n",
+							"        \"last_modified\": row.last_modified.isoformat()\n",
+							"    })\n",
+							"\n",
+							"print(json.dumps(work_items, indent=2))"
+						],
+						"outputs": [],
+						"execution_count": 70
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"mssparkutils.notebook.exit(json.dumps(work_items))"
+						],
+						"outputs": [],
+						"execution_count": 71
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/sparkdev')]",
+			"type": "Microsoft.Synapse/workspaces/bigDataPools",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"autoPause": {
+					"enabled": true,
+					"delayInMinutes": 5
+				},
+				"autoScale": {
+					"enabled": true,
+					"maxNodeCount": 10,
+					"minNodeCount": 3
+				},
+				"nodeCount": 3,
+				"nodeSize": "Small",
+				"nodeSizeFamily": "MemoryOptimized",
+				"sparkVersion": "3.5",
+				"isComputeIsolationEnabled": false,
+				"sessionLevelPackagesEnabled": true,
+				"annotations": []
+			},
+			"dependsOn": [],
+			"location": "australiaeast"
+		}
+	]
+}
