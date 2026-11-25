@@ -1,0 +1,9 @@
+{
+    "type": "struct",
+    "fields": [
+        {"name": "LocationID", "type": "string", "nullable": true, "metadata": {}},
+        {"name": "Borough", "type": "string", "nullable": true, "metadata": {}},
+        {"name": "Zone", "type": "string", "nullable": true, "metadata": {}},
+        {"name": "service_zone", "type": "string", "nullable": true, "metadata": {}}
+    ]
+}
