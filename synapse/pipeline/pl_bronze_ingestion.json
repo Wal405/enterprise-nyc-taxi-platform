@@ -79,11 +79,55 @@
 								},
 								"waitOnCompletion": true,
 								"parameters": {
-									"file_info": "@item()"
+									"file_info": {
+										"value": "@item()",
+										"type": "Expression"
+									}
 								}
 							}
 						}
 					]
+				}
+			},
+			{
+				"name": "Notebook1",
+				"type": "SynapseNotebook",
+				"dependsOn": [
+					{
+						"activity": "ForEach1",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"notebook": {
+						"referenceName": "nb_finalize_ingestion",
+						"type": "NotebookReference"
+					},
+					"parameters": {
+						"config_uri": {
+							"value": "@pipeline().parameters.config_uri",
+							"type": "string"
+						},
+						"work_items_json": {
+							"value": "@activity('prepare_ingestion').output.status.Output.result.exitValue",
+							"type": "string"
+						},
+						"pipeline_run_id": {
+							"value": "@pipeline().RunId",
+							"type": "string"
+						}
+					},
+					"snapshot": true
 				}
 			}
 		],
