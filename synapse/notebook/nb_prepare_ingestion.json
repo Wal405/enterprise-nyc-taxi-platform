@@ -1,0 +1,249 @@
+{
+	"name": "nb_prepare_ingestion",
+	"properties": {
+		"folder": {
+			"name": "bronze"
+		},
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "sparkdev",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "f9ae540e-8c85-4a83-b9a7-9ca3282287d3"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"enableDebugMode": true,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "Synapse PySpark"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/bfb3ee8b-3a87-4110-ab4d-946085af8a42/resourceGroups/rg-nyctaxi-dev/providers/Microsoft.Synapse/workspaces/syn-nyctaxi-dev-001/bigDataPools/sparkdev",
+				"name": "sparkdev",
+				"type": "Spark",
+				"endpoint": "https://syn-nyctaxi-dev-001.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkdev",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net"
+				},
+				"sparkVersion": "3.5",
+				"nodeCount": 3,
+				"cores": 4,
+				"memory": 28,
+				"automaticScaleJobs": false
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "code",
+				"source": [
+					"config_uri = \"abfss://config@stnyctaxidev001.dfs.core.windows.net/environments/dev.json\""
+				],
+				"execution_count": 49
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"%run /utils/nb_common_utils"
+				],
+				"execution_count": 61
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"config = load_config(config_uri)\n",
+					"datasets = load_datasets(config)\n",
+					"\n",
+					"spark.conf.set(\n",
+					"    \"spark.sql.session.timeZone\",\n",
+					"    config[\"processing\"][\"timezone\"]\n",
+					")"
+				],
+				"execution_count": 62
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"manifest_path = build_storage_path(\n",
+					"    config,\n",
+					"    \"monitoring\",\n",
+					"    config[\"paths\"][\"monitoring\"][\"ingestion_manifest\"]\n",
+					")\n",
+					"\n",
+					"manifest_df = spark.read.format(\"delta\").load(manifest_path)"
+				],
+				"execution_count": 63
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"collapsed": false
+				},
+				"source": [
+					"from pyspark.sql import functions as F\n",
+					"\n",
+					"source_files = [\n",
+					"    (\n",
+					"        dataset[\"dataset_id\"],\n",
+					"        file.name,\n",
+					"        file.path,\n",
+					"        file.size,\n",
+					"        file.modifyTime\n",
+					"    )\n",
+					"    for dataset in datasets\n",
+					"    for file in discover_source_files(config, dataset)\n",
+					"]\n",
+					"\n",
+					"inventory_df = spark.createDataFrame(\n",
+					"    source_files,\n",
+					"    \"\"\"\n",
+					"    dataset_id string,\n",
+					"    file_name string,\n",
+					"    source_path string,\n",
+					"    file_size_bytes long,\n",
+					"    modified_ms long\n",
+					"    \"\"\"\n",
+					").withColumn(\n",
+					"    \"last_modified\",\n",
+					"    F.timestamp_millis(\"modified_ms\")\n",
+					").drop(\"modified_ms\")\n",
+					"\n",
+					"display(inventory_df)"
+				],
+				"execution_count": 65
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"collapsed": false
+				},
+				"source": [
+					"inventory_df = inventory_df.withColumn(\n",
+					"    \"file_id\",\n",
+					"    F.sha2(\n",
+					"        F.to_json(\n",
+					"            F.struct(\n",
+					"                \"dataset_id\",\n",
+					"                \"source_path\",\n",
+					"                \"file_size_bytes\",\n",
+					"                \"last_modified\"\n",
+					"            )\n",
+					"        ),\n",
+					"        256\n",
+					"    )\n",
+					")\n",
+					"\n",
+					"display(inventory_df)"
+				],
+				"execution_count": 66
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"processed_df = (\n",
+					"    manifest_df\n",
+					"    .filter(F.col(\"status\") == \"SUCCESS\")\n",
+					"    .select(\n",
+					"        \"dataset_id\",\n",
+					"        \"source_path\",\n",
+					"        \"file_size_bytes\",\n",
+					"        \"last_modified\"\n",
+					"    )\n",
+					"    .distinct()\n",
+					")"
+				],
+				"execution_count": 67
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"collapsed": false
+				},
+				"source": [
+					"eligible_df = inventory_df.join(\n",
+					"    processed_df,\n",
+					"    [\n",
+					"        \"dataset_id\",\n",
+					"        \"source_path\",\n",
+					"        \"file_size_bytes\",\n",
+					"        \"last_modified\"\n",
+					"    ],\n",
+					"    \"left_anti\"\n",
+					")\n",
+					"\n",
+					"display(eligible_df)"
+				],
+				"execution_count": 68
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"total = inventory_df.count()\n",
+					"eligible = eligible_df.count()\n",
+					"\n",
+					"print(\"Discovered files:\", total)\n",
+					"print(\"Eligible files:\", eligible)\n",
+					"print(\"Skipped files:\", total - eligible)"
+				],
+				"execution_count": 69
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"dataset_lookup = {\n",
+					"    d[\"dataset_id\"]: d for d in datasets\n",
+					"}\n",
+					"\n",
+					"storage = config[\"azure\"][\"storage\"]\n",
+					"\n",
+					"work_items = []\n",
+					"\n",
+					"for row in eligible_df.collect():\n",
+					"    dataset = dataset_lookup[row.dataset_id]\n",
+					"    source = dataset[\"source\"]\n",
+					"    target = dataset[\"target\"]\n",
+					"\n",
+					"    work_items.append({\n",
+					"        \"dataset_id\": row.dataset_id,\n",
+					"        \"storage_account_name\": storage[\"account_name\"],\n",
+					"        \"source_container\": storage[\"containers\"][source[\"layer\"]],\n",
+					"        \"source_directory\": source[\"directory\"],\n",
+					"        \"target_container\": storage[\"containers\"][target[\"layer\"]],\n",
+					"        \"target_directory\": target[\"directory\"],\n",
+					"        \"file_name\": row.file_name,\n",
+					"        \"source_path\": row.source_path,\n",
+					"        \"file_size_bytes\": row.file_size_bytes,\n",
+					"        \"last_modified\": row.last_modified.isoformat()\n",
+					"    })\n",
+					"\n",
+					"print(json.dumps(work_items, indent=2))"
+				],
+				"execution_count": 70
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"mssparkutils.notebook.exit(json.dumps(work_items))"
+				],
+				"execution_count": 71
+			}
+		]
+	}
+}

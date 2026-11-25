@@ -1,0 +1,90 @@
+{
+	"name": "pl_ingest_file",
+	"properties": {
+		"activities": [
+			{
+				"name": "cpy_landing_to_bronze",
+				"type": "Copy",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "BinarySource",
+						"storeSettings": {
+							"type": "AzureBlobFSReadSettings",
+							"recursive": true
+						},
+						"formatSettings": {
+							"type": "BinaryReadSettings"
+						}
+					},
+					"sink": {
+						"type": "BinarySink",
+						"storeSettings": {
+							"type": "AzureBlobFSWriteSettings"
+						}
+					},
+					"enableStaging": false
+				},
+				"inputs": [
+					{
+						"referenceName": "ds_adls_binary",
+						"type": "DatasetReference",
+						"parameters": {
+							"storage_account_name": {
+								"value": "@pipeline().parameters.file_info.storage_account_name",
+								"type": "Expression"
+							},
+							"container": {
+								"value": "@pipeline().parameters.file_info.source_container",
+								"type": "Expression"
+							},
+							"directory": {
+								"value": "@pipeline().parameters.file_info.source_directory",
+								"type": "Expression"
+							},
+							"file_name": {
+								"value": "@pipeline().parameters.file_info.file_name",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "ds_adls_binary",
+						"type": "DatasetReference",
+						"parameters": {
+							"storage_account_name": "@pipeline().parameters.file_info.storage_account_name",
+							"container": "@pipeline().parameters.file_info.target_container",
+							"directory": {
+								"value": "@pipeline().parameters.file_info.target_directory",
+								"type": "Expression"
+							},
+							"file_name": {
+								"value": "@pipeline().parameters.file_info.file_name",
+								"type": "Expression"
+							}
+						}
+					}
+				]
+			}
+		],
+		"parameters": {
+			"file_info": {
+				"type": "object"
+			}
+		},
+		"folder": {
+			"name": "bronze"
+		},
+		"annotations": []
+	}
+}
