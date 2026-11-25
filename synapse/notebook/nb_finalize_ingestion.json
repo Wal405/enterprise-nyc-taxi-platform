@@ -1,0 +1,164 @@
+{
+	"name": "nb_finalize_ingestion",
+	"properties": {
+		"folder": {
+			"name": "bronze"
+		},
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "sparkdev",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "56f79c85-0757-4582-82e8-3af2f94a6064"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"enableDebugMode": true,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "Synapse PySpark"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/bfb3ee8b-3a87-4110-ab4d-946085af8a42/resourceGroups/rg-nyctaxi-dev/providers/Microsoft.Synapse/workspaces/syn-nyctaxi-dev-001/bigDataPools/sparkdev",
+				"name": "sparkdev",
+				"type": "Spark",
+				"endpoint": "https://syn-nyctaxi-dev-001.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkdev",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net"
+				},
+				"sparkVersion": "3.5",
+				"nodeCount": 3,
+				"cores": 4,
+				"memory": 28,
+				"automaticScaleJobs": false
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "code",
+				"metadata": {
+					"tags": [
+						"parameters"
+					]
+				},
+				"source": [
+					"config_uri = \"abfss://config@stnyctaxidev001.dfs.core.windows.net/environments/dev.json\"\n",
+					"work_items_json = \"[]\"\n",
+					"pipeline_run_id = \"\""
+				],
+				"execution_count": 131
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"%run /utils/nb_common_utils"
+				],
+				"execution_count": 129
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"from datetime import datetime, timezone\n",
+					"from delta.tables import DeltaTable\n",
+					"\n",
+					"config = load_config(config_uri)\n",
+					"work_items = json.loads(work_items_json)\n",
+					"\n",
+					"spark.conf.set(\"spark.sql.session.timeZone\", \"UTC\")\n",
+					"\n",
+					"manifest_path = build_storage_path(\n",
+					"    config,\n",
+					"    \"monitoring\",\n",
+					"    config[\"paths\"][\"monitoring\"][\"ingestion_manifest\"]\n",
+					")\n",
+					"\n",
+					"manifest_df = spark.read.format(\"delta\").load(manifest_path)"
+				],
+				"execution_count": 132
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"records = []\n",
+					"\n",
+					"for item in work_items:\n",
+					"    target_directory = build_storage_path(\n",
+					"        config,\n",
+					"        \"bronze\",\n",
+					"        item[\"target_directory\"]\n",
+					"    )\n",
+					"\n",
+					"    target = next(\n",
+					"        f for f in mssparkutils.fs.ls(target_directory)\n",
+					"        if f.isFile and f.name == item[\"file_name\"]\n",
+					"    )\n",
+					"\n",
+					"    assert target.size == item[\"file_size_bytes\"]\n",
+					"\n",
+					"    records.append({\n",
+					"        \"dataset_id\": item[\"dataset_id\"],\n",
+					"        \"file_name\": item[\"file_name\"],\n",
+					"        \"source_path\": item[\"source_path\"],\n",
+					"        \"target_path\": target.path,\n",
+					"        \"file_size_bytes\": item[\"file_size_bytes\"],\n",
+					"        \"last_modified\": datetime.fromisoformat(\n",
+					"            item[\"last_modified\"]\n",
+					"        ).replace(tzinfo=timezone.utc),\n",
+					"        \"source_month\": None,\n",
+					"        \"batch_id\": pipeline_run_id,\n",
+					"        \"pipeline_run_id\": pipeline_run_id,\n",
+					"        \"ingested_at\": datetime.now(timezone.utc),\n",
+					"        \"status\": \"SUCCESS\",\n",
+					"        \"error_message\": None\n",
+					"    })"
+				],
+				"execution_count": 133
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"if records:\n",
+					"    updates_df = spark.createDataFrame(\n",
+					"        records,\n",
+					"        manifest_df.schema\n",
+					"    )\n",
+					"\n",
+					"    (\n",
+					"        DeltaTable.forPath(spark, manifest_path)\n",
+					"        .alias(\"t\")\n",
+					"        .merge(\n",
+					"            updates_df.alias(\"s\"),\n",
+					"            \"\"\"\n",
+					"            t.pipeline_run_id = s.pipeline_run_id\n",
+					"            AND t.dataset_id = s.dataset_id\n",
+					"            AND t.source_path = s.source_path\n",
+					"            \"\"\"\n",
+					"        )\n",
+					"        .whenNotMatchedInsertAll()\n",
+					"        .execute()\n",
+					"    )\n",
+					"\n",
+					"print(\"Validated files:\", len(records))"
+				],
+				"execution_count": 134
+			}
+		]
+	}
+}
