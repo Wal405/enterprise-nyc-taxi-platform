@@ -1,0 +1,111 @@
+{
+	"name": "nb_03_initialize_control_tables",
+	"properties": {
+		"folder": {
+			"name": "setup"
+		},
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "sparkdev",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "9f0668cf-21a7-4dcc-a0bc-f5abccdfa17c"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"enableDebugMode": true,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "Synapse PySpark"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/bfb3ee8b-3a87-4110-ab4d-946085af8a42/resourceGroups/rg-nyctaxi-dev/providers/Microsoft.Synapse/workspaces/syn-nyctaxi-dev-001/bigDataPools/sparkdev",
+				"name": "sparkdev",
+				"type": "Spark",
+				"endpoint": "https://syn-nyctaxi-dev-001.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkdev",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net"
+				},
+				"sparkVersion": "3.5",
+				"nodeCount": 3,
+				"cores": 4,
+				"memory": 28,
+				"automaticScaleJobs": false
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "code",
+				"source": [
+					"config_uri = \"abfss://config@stnyctaxidev001.dfs.core.windows.net/environments/dev.json\""
+				],
+				"execution_count": 45
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"config = load_config(config_uri)\n",
+					"\n",
+					"manifest_path = build_storage_path(\n",
+					"    config,\n",
+					"    \"monitoring\",\n",
+					"    config[\"paths\"][\"monitoring\"][\"ingestion_manifest\"]\n",
+					")\n",
+					"\n",
+					"schema_path = build_storage_path(\n",
+					"    config,\n",
+					"    \"config\",\n",
+					"    config[\"paths\"][\"config\"][\"manifest_schema\"]\n",
+					")\n",
+					"\n",
+					"manifest_schema = StructType.fromJson(load_config(schema_path))"
+				],
+				"execution_count": 46
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"from delta.tables import DeltaTable\n",
+					"\n",
+					"if not DeltaTable.isDeltaTable(spark, manifest_path):\n",
+					"    (\n",
+					"        spark.createDataFrame([], manifest_schema)\n",
+					"        .write\n",
+					"        .format(\"delta\")\n",
+					"        .mode(\"errorifexists\")\n",
+					"        .save(manifest_path)\n",
+					"    )"
+				],
+				"execution_count": 47
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"manifest_df = spark.read.format(\"delta\").load(manifest_path)\n",
+					"\n",
+					"manifest_df.printSchema()\n",
+					"\n",
+					"print(\"Total records:\", manifest_df.count())"
+				],
+				"execution_count": 48
+			}
+		]
+	}
+}
