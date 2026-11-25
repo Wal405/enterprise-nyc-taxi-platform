@@ -1,0 +1,244 @@
+{
+	"name": "nb_02_source_profiling",
+	"properties": {
+		"folder": {
+			"name": "profiling"
+		},
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "sparkdev",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "d3e7cf91-c3bd-4f0d-bb1b-f4ff3b979996"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"enableDebugMode": true,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "Synapse PySpark"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/bfb3ee8b-3a87-4110-ab4d-946085af8a42/resourceGroups/rg-nyctaxi-dev/providers/Microsoft.Synapse/workspaces/syn-nyctaxi-dev-001/bigDataPools/sparkdev",
+				"name": "sparkdev",
+				"type": "Spark",
+				"endpoint": "https://syn-nyctaxi-dev-001.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkdev",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net"
+				},
+				"sparkVersion": "3.5",
+				"nodeCount": 3,
+				"cores": 4,
+				"memory": 28,
+				"automaticScaleJobs": false
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "code",
+				"source": [
+					"config_uri = \"abfss://config@stnyctaxidev001.dfs.core.windows.net/environments/dev.json\""
+				],
+				"execution_count": 1
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"%run /utils/nb_common_utils"
+				],
+				"execution_count": 42
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"config = load_config(config_uri)\n",
+					"datasets = load_datasets(config)"
+				],
+				"execution_count": 43
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"collapsed": false
+				},
+				"source": [
+					"source_inventory = []\n",
+					"\n",
+					"for dataset in datasets:\n",
+					"\n",
+					"    files = discover_source_files(\n",
+					"        config,\n",
+					"        dataset\n",
+					"    )\n",
+					"\n",
+					"    if not files:\n",
+					"        raise FileNotFoundError(\n",
+					"            f\"No files found for {dataset['dataset_id']}\"\n",
+					"        )\n",
+					"\n",
+					"    for file in files:\n",
+					"\n",
+					"        source_inventory.append({\n",
+					"            \"dataset_id\": dataset[\"dataset_id\"],\n",
+					"            \"file_name\": file.name,\n",
+					"            \"file_path\": file.path,\n",
+					"            \"file_size_bytes\": file.size,\n",
+					"            \"file_format\": dataset[\"source\"][\"format\"]\n",
+					"        })\n",
+					"\n",
+					"inventory_df = spark.createDataFrame(source_inventory)\n",
+					"\n",
+					"display(inventory_df)"
+				],
+				"execution_count": 29
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"collapsed": false
+				},
+				"source": [
+					"file_profiles = []\n",
+					"schema_profiles = []\n",
+					"\n",
+					"dataset_lookup = {\n",
+					"    dataset[\"dataset_id\"]: dataset\n",
+					"    for dataset in datasets\n",
+					"}\n",
+					"\n",
+					"for file in source_inventory:\n",
+					"\n",
+					"    dataset = dataset_lookup[file[\"dataset_id\"]]\n",
+					"\n",
+					"    df = read_source_file(\n",
+					"        spark,\n",
+					"        dataset,\n",
+					"        file[\"file_path\"]\n",
+					"    )\n",
+					"\n",
+					"    row_count = df.count()\n",
+					"\n",
+					"    file_profiles.append({\n",
+					"        \"dataset_id\": file[\"dataset_id\"],\n",
+					"        \"file_name\": file[\"file_name\"],\n",
+					"        \"file_format\": file[\"file_format\"],\n",
+					"        \"file_size_bytes\": file[\"file_size_bytes\"],\n",
+					"        \"row_count\": row_count,\n",
+					"        \"column_count\": len(df.columns)\n",
+					"    })\n",
+					"\n",
+					"    for field in df.schema.fields:\n",
+					"\n",
+					"        schema_profiles.append({\n",
+					"            \"dataset_id\": file[\"dataset_id\"],\n",
+					"            \"file_name\": file[\"file_name\"],\n",
+					"            \"column_name\": field.name,\n",
+					"            \"data_type\": field.dataType.simpleString(),\n",
+					"            \"nullable\": field.nullable\n",
+					"        })\n",
+					"\n",
+					"file_profile_df = spark.createDataFrame(file_profiles)\n",
+					"\n",
+					"schema_profile_df = spark.createDataFrame(schema_profiles)\n",
+					"\n",
+					"display(file_profile_df)\n",
+					"\n",
+					"display(schema_profile_df)"
+				],
+				"execution_count": 30
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"collapsed": false
+				},
+				"source": [
+					"from pyspark.sql import functions as F\n",
+					"\n",
+					"dataset_summary_df = (\n",
+					"    file_profile_df\n",
+					"    .groupBy(\"dataset_id\")\n",
+					"    .agg(\n",
+					"        F.count(\"*\").alias(\"total_files\"),\n",
+					"        F.sum(\"row_count\").alias(\"total_records\"),\n",
+					"        F.sum(\"file_size_bytes\").alias(\"total_bytes\")\n",
+					"    )\n",
+					"    .withColumn(\n",
+					"        \"total_size_mb\",\n",
+					"        F.round(\n",
+					"            F.col(\"total_bytes\") / (1024 ** 2),\n",
+					"            2\n",
+					"        )\n",
+					"    )\n",
+					")\n",
+					"\n",
+					"display(dataset_summary_df)"
+				],
+				"execution_count": 31
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"for dataset in datasets:\n",
+					"    for file in discover_source_files(config, dataset):\n",
+					"        df = read_source_file(spark, dataset, file.path)\n",
+					"\n",
+					"        nulls = df.agg(*[\n",
+					"            F.count(F.when(F.col(c).isNull(), 1)).alias(c)\n",
+					"            for c in df.columns\n",
+					"        ]).first().asDict()\n",
+					"\n",
+					"        print(file.name, {k: v for k, v in nulls.items() if v > 0})"
+				],
+				"execution_count": 36
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"collapsed": false
+				},
+				"source": [
+					"for dataset in datasets:\n",
+					"    file = discover_source_files(config, dataset)[0]\n",
+					"    df = read_source_file(spark, dataset, file.path)\n",
+					"\n",
+					"    print(dataset[\"dataset_id\"])\n",
+					"    print(df.schema.json())"
+				],
+				"execution_count": 38
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"for dataset in datasets:\n",
+					"    expected = load_schema(config, dataset)\n",
+					"\n",
+					"    for file in discover_source_files(config, dataset):\n",
+					"        actual = read_source_file(spark, dataset, file.path).schema\n",
+					"\n",
+					"        assert actual == expected, f\"Schema mismatch: {file.name}\"\n",
+					"\n",
+					"    print(f\"PASS: {dataset['dataset_id']}\")"
+				],
+				"execution_count": 44
+			}
+		]
+	}
+}

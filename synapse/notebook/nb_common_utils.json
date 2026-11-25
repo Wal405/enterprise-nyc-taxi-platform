@@ -20,12 +20,12 @@
 				"spark.dynamicAllocation.enabled": "false",
 				"spark.dynamicAllocation.minExecutors": "2",
 				"spark.dynamicAllocation.maxExecutors": "2",
-				"spark.autotune.trackingId": "97bf514e-94be-44ed-93bd-39e5c84d4224"
+				"spark.autotune.trackingId": "c5c130b2-a9a5-43ed-ac3a-c68bba67d257"
 			}
 		},
 		"metadata": {
 			"saveOutput": true,
-			"enableDebugMode": false,
+			"enableDebugMode": true,
 			"kernelspec": {
 				"name": "synapse_pyspark",
 				"display_name": "Synapse PySpark"
@@ -58,7 +58,7 @@
 					"from fnmatch import fnmatchcase\n",
 					"from notebookutils import mssparkutils"
 				],
-				"execution_count": 11
+				"execution_count": 15
 			},
 			{
 				"cell_type": "code",
@@ -73,7 +73,7 @@
 					"\n",
 					"    return json.loads(mssparkutils.fs.head(uri, file.size))"
 				],
-				"execution_count": 12
+				"execution_count": 16
 			},
 			{
 				"cell_type": "code",
@@ -87,7 +87,7 @@
 					"\n",
 					"    return f\"abfss://{container}@{account}.{endpoint}/{relative_path.lstrip('/')}\""
 				],
-				"execution_count": 13
+				"execution_count": 17
 			},
 			{
 				"cell_type": "code",
@@ -104,7 +104,7 @@
 					"        if d[\"enabled\"]\n",
 					"    ]"
 				],
-				"execution_count": 14
+				"execution_count": 18
 			},
 			{
 				"cell_type": "code",
@@ -123,7 +123,7 @@
 					"        if f.isFile and fnmatchcase(f.name, source[\"file_pattern\"])\n",
 					"    ]"
 				],
-				"execution_count": 15
+				"execution_count": 19
 			},
 			{
 				"cell_type": "code",
@@ -138,7 +138,30 @@
 					"        .load(path)\n",
 					"    )"
 				],
-				"execution_count": 16
+				"execution_count": 20
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"from pyspark.sql.types import StructType\n",
+					"\n",
+					"def load_schema(config, dataset):\n",
+					"    path = build_storage_path(\n",
+					"        config,\n",
+					"        \"config\",\n",
+					"        f\"{config['paths']['config']['schemas']}/{dataset['source']['schema_file']}\"\n",
+					"    )\n",
+					"\n",
+					"    return StructType.fromJson(load_config(path))"
+				],
+				"execution_count": 39
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					""
+				],
+				"execution_count": null
 			}
 		]
 	}
