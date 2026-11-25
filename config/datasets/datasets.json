@@ -9,6 +9,7 @@
                 "directory": "nyc_taxi/yellow_trips",
                 "file_pattern": "yellow_tripdata_*.parquet",
                 "format": "parquet",
+                "schema_file": "yellow_trips.json",
                 "options": {}
             },
             "target": {
@@ -28,6 +29,7 @@
                 "directory": "nyc_taxi/taxi_zones",
                 "file_pattern": "taxi_zone_lookup.csv",
                 "format": "csv",
+                "schema_file": "taxi_zones.json",
                 "options": {
                     "header": "true",
                     "delimiter": ","
