@@ -29,6 +29,7 @@
             "datasets": "datasets",
             "schemas": "schemas",
             "quality_rules": "quality_rules",
+			"manifest_schema": "schemas/ingestion_manifest.json",
             "dataset_registry": "datasets/datasets.json"
         },
         "monitoring": {
