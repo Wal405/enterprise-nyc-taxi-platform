@@ -20,7 +20,7 @@
 				"spark.dynamicAllocation.enabled": "false",
 				"spark.dynamicAllocation.minExecutors": "2",
 				"spark.dynamicAllocation.maxExecutors": "2",
-				"spark.autotune.trackingId": "f9ae540e-8c85-4a83-b9a7-9ca3282287d3"
+				"spark.autotune.trackingId": "5a3a33e5-fe6a-4398-998a-cbbca3def563"
 			}
 		},
 		"metadata": {
@@ -53,17 +53,22 @@
 		"cells": [
 			{
 				"cell_type": "code",
+				"metadata": {
+					"tags": [
+						"parameters"
+					]
+				},
 				"source": [
 					"config_uri = \"abfss://config@stnyctaxidev001.dfs.core.windows.net/environments/dev.json\""
 				],
-				"execution_count": 49
+				"execution_count": 107
 			},
 			{
 				"cell_type": "code",
 				"source": [
 					"%run /utils/nb_common_utils"
 				],
-				"execution_count": 61
+				"execution_count": 127
 			},
 			{
 				"cell_type": "code",
@@ -76,7 +81,7 @@
 					"    config[\"processing\"][\"timezone\"]\n",
 					")"
 				],
-				"execution_count": 62
+				"execution_count": 109
 			},
 			{
 				"cell_type": "code",
@@ -89,7 +94,7 @@
 					"\n",
 					"manifest_df = spark.read.format(\"delta\").load(manifest_path)"
 				],
-				"execution_count": 63
+				"execution_count": 110
 			},
 			{
 				"cell_type": "code",
@@ -127,7 +132,7 @@
 					"\n",
 					"display(inventory_df)"
 				],
-				"execution_count": 65
+				"execution_count": 111
 			},
 			{
 				"cell_type": "code",
@@ -152,7 +157,7 @@
 					"\n",
 					"display(inventory_df)"
 				],
-				"execution_count": 66
+				"execution_count": 112
 			},
 			{
 				"cell_type": "code",
@@ -169,7 +174,7 @@
 					"    .distinct()\n",
 					")"
 				],
-				"execution_count": 67
+				"execution_count": 113
 			},
 			{
 				"cell_type": "code",
@@ -190,7 +195,7 @@
 					"\n",
 					"display(eligible_df)"
 				],
-				"execution_count": 68
+				"execution_count": 114
 			},
 			{
 				"cell_type": "code",
@@ -202,7 +207,7 @@
 					"print(\"Eligible files:\", eligible)\n",
 					"print(\"Skipped files:\", total - eligible)"
 				],
-				"execution_count": 69
+				"execution_count": 115
 			},
 			{
 				"cell_type": "code",
@@ -235,14 +240,14 @@
 					"\n",
 					"print(json.dumps(work_items, indent=2))"
 				],
-				"execution_count": 70
+				"execution_count": 116
 			},
 			{
 				"cell_type": "code",
 				"source": [
 					"mssparkutils.notebook.exit(json.dumps(work_items))"
 				],
-				"execution_count": 71
+				"execution_count": 117
 			}
 		]
 	}

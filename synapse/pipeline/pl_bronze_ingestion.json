@@ -1,0 +1,100 @@
+{
+	"name": "pl_bronze_ingestion",
+	"properties": {
+		"activities": [
+			{
+				"name": "prepare_ingestion",
+				"type": "SynapseNotebook",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"notebook": {
+						"referenceName": "nb_prepare_ingestion",
+						"type": "NotebookReference"
+					},
+					"parameters": {
+						"config_uri": {
+							"value": {
+								"value": "@pipeline().parameters.config_uri",
+								"type": "Expression"
+							},
+							"type": "string"
+						}
+					},
+					"snapshot": true,
+					"sparkPool": {
+						"referenceName": "sparkdev",
+						"type": "BigDataPoolReference"
+					},
+					"conf": {
+						"spark.dynamicAllocation.enabled": false,
+						"spark.dynamicAllocation.minExecutors": 1,
+						"spark.dynamicAllocation.maxExecutors": 1
+					},
+					"numExecutors": 1,
+					"authentication": {
+						"type": "MSI"
+					}
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "prepare_ingestion",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@json(activity('prepare_ingestion').output.status.Output.result.exitValue)",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"batchCount": 4,
+					"activities": [
+						{
+							"name": "ingest_file",
+							"type": "ExecutePipeline",
+							"dependsOn": [],
+							"policy": {
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"pipeline": {
+									"referenceName": "pl_ingest_file",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true,
+								"parameters": {
+									"file_info": "@item()"
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"config_uri": {
+				"type": "string"
+			}
+		},
+		"folder": {
+			"name": "bronze"
+		},
+		"annotations": []
+	}
+}
