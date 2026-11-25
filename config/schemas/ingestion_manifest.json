@@ -1,0 +1,17 @@
+{
+    "type": "struct",
+    "fields": [
+        {"name": "dataset_id", "type": "string", "nullable": false, "metadata": {}},
+        {"name": "file_name", "type": "string", "nullable": false, "metadata": {}},
+        {"name": "source_path", "type": "string", "nullable": false, "metadata": {}},
+        {"name": "target_path", "type": "string", "nullable": true, "metadata": {}},
+        {"name": "file_size_bytes", "type": "long", "nullable": false, "metadata": {}},
+        {"name": "last_modified", "type": "timestamp", "nullable": true, "metadata": {}},
+        {"name": "source_month", "type": "string", "nullable": true, "metadata": {}},
+        {"name": "batch_id", "type": "string", "nullable": false, "metadata": {}},
+        {"name": "pipeline_run_id", "type": "string", "nullable": false, "metadata": {}},
+        {"name": "ingested_at", "type": "timestamp", "nullable": true, "metadata": {}},
+        {"name": "status", "type": "string", "nullable": false, "metadata": {}},
+        {"name": "error_message", "type": "string", "nullable": true, "metadata": {}}
+    ]
+}
