@@ -30,6 +30,119 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('workspaceName'), '/pl_bronze_ingestion')]",
+			"type": "Microsoft.Synapse/workspaces/pipelines",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"activities": [
+					{
+						"name": "prepare_ingestion",
+						"type": "SynapseNotebook",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"notebook": {
+								"referenceName": "nb_prepare_ingestion",
+								"type": "NotebookReference"
+							},
+							"parameters": {
+								"config_uri": {
+									"value": {
+										"value": "@pipeline().parameters.config_uri",
+										"type": "Expression"
+									},
+									"type": "string"
+								}
+							},
+							"snapshot": true,
+							"sparkPool": {
+								"referenceName": "sparkdev",
+								"type": "BigDataPoolReference"
+							},
+							"conf": {
+								"spark.dynamicAllocation.enabled": false,
+								"spark.dynamicAllocation.minExecutors": 1,
+								"spark.dynamicAllocation.maxExecutors": 1
+							},
+							"numExecutors": 1,
+							"authentication": {
+								"type": "MSI"
+							}
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "prepare_ingestion",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@json(activity('prepare_ingestion').output.status.Output.result.exitValue)",
+								"type": "Expression"
+							},
+							"isSequential": false,
+							"batchCount": 4,
+							"activities": [
+								{
+									"name": "ingest_file",
+									"type": "ExecutePipeline",
+									"dependsOn": [],
+									"policy": {
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "pl_ingest_file",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"file_info": {
+												"value": "@item()",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"config_uri": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "bronze"
+				},
+				"annotations": []
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/notebooks/nb_prepare_ingestion')]",
+				"[concat(variables('workspaceId'), '/bigDataPools/sparkdev')]",
+				"[concat(variables('workspaceId'), '/pipelines/pl_ingest_file')]"
+			]
+		},
+		{
 			"name": "[concat(parameters('workspaceName'), '/pl_ingest_file')]",
 			"type": "Microsoft.Synapse/workspaces/pipelines",
 			"apiVersion": "2019-06-01-preview",
@@ -1160,7 +1273,7 @@
 						"spark.dynamicAllocation.enabled": "false",
 						"spark.dynamicAllocation.minExecutors": "2",
 						"spark.dynamicAllocation.maxExecutors": "2",
-						"spark.autotune.trackingId": "0e7c07ed-efa4-4cb9-bce9-98ff722d3586"
+						"spark.autotune.trackingId": "8c41c1f6-b5fc-4f6c-ad00-246b1fd78ef4"
 					}
 				},
 				"metadata": {
@@ -1198,7 +1311,7 @@
 							"from notebookutils import mssparkutils"
 						],
 						"outputs": [],
-						"execution_count": 52
+						"execution_count": 121
 					},
 					{
 						"cell_type": "code",
@@ -1214,7 +1327,7 @@
 							"    return json.loads(mssparkutils.fs.head(uri, file.size))"
 						],
 						"outputs": [],
-						"execution_count": 53
+						"execution_count": null
 					},
 					{
 						"cell_type": "code",
@@ -1229,7 +1342,7 @@
 							"    return f\"abfss://{container}@{account}.{endpoint}/{relative_path.lstrip('/')}\""
 						],
 						"outputs": [],
-						"execution_count": 54
+						"execution_count": null
 					},
 					{
 						"cell_type": "code",
@@ -1247,7 +1360,7 @@
 							"    ]"
 						],
 						"outputs": [],
-						"execution_count": 55
+						"execution_count": null
 					},
 					{
 						"cell_type": "code",
@@ -1267,7 +1380,7 @@
 							"    ]"
 						],
 						"outputs": [],
-						"execution_count": 56
+						"execution_count": null
 					},
 					{
 						"cell_type": "code",
@@ -1283,7 +1396,7 @@
 							"    )"
 						],
 						"outputs": [],
-						"execution_count": 57
+						"execution_count": null
 					},
 					{
 						"cell_type": "code",
@@ -1300,7 +1413,7 @@
 							"    return StructType.fromJson(load_config(path))"
 						],
 						"outputs": [],
-						"execution_count": 58
+						"execution_count": null
 					},
 					{
 						"cell_type": "code",
@@ -1338,7 +1451,7 @@
 						"spark.dynamicAllocation.enabled": "false",
 						"spark.dynamicAllocation.minExecutors": "2",
 						"spark.dynamicAllocation.maxExecutors": "2",
-						"spark.autotune.trackingId": "f188e98c-8abf-40dd-bba4-da2a5dbda841"
+						"spark.autotune.trackingId": "5a3a33e5-fe6a-4398-998a-cbbca3def563"
 					}
 				},
 				"metadata": {
@@ -1363,33 +1476,34 @@
 						"sparkVersion": "3.5",
 						"nodeCount": 3,
 						"cores": 4,
-						"memory": 28,
-						"automaticScaleJobs": false
+						"memory": 28
 					},
 					"sessionKeepAliveTimeout": 30
 				},
 				"cells": [
 					{
 						"cell_type": "code",
-						"metadata": {},
+						"metadata": {
+							"tags": [
+								"parameters"
+							]
+						},
 						"source": [
 							"config_uri = \"abfss://config@stnyctaxidev001.dfs.core.windows.net/environments/dev.json\""
 						],
 						"outputs": [],
-						"execution_count": 49
+						"execution_count": 107
 					},
 					{
 						"cell_type": "code",
-						"metadata": {},
 						"source": [
 							"%run /utils/nb_common_utils"
 						],
 						"outputs": [],
-						"execution_count": 61
+						"execution_count": 127
 					},
 					{
 						"cell_type": "code",
-						"metadata": {},
 						"source": [
 							"config = load_config(config_uri)\n",
 							"datasets = load_datasets(config)\n",
@@ -1400,11 +1514,10 @@
 							")"
 						],
 						"outputs": [],
-						"execution_count": 62
+						"execution_count": 109
 					},
 					{
 						"cell_type": "code",
-						"metadata": {},
 						"source": [
 							"manifest_path = build_storage_path(\n",
 							"    config,\n",
@@ -1415,7 +1528,7 @@
 							"manifest_df = spark.read.format(\"delta\").load(manifest_path)"
 						],
 						"outputs": [],
-						"execution_count": 63
+						"execution_count": 110
 					},
 					{
 						"cell_type": "code",
@@ -1454,7 +1567,7 @@
 							"display(inventory_df)"
 						],
 						"outputs": [],
-						"execution_count": 65
+						"execution_count": 111
 					},
 					{
 						"cell_type": "code",
@@ -1480,11 +1593,10 @@
 							"display(inventory_df)"
 						],
 						"outputs": [],
-						"execution_count": 66
+						"execution_count": 112
 					},
 					{
 						"cell_type": "code",
-						"metadata": {},
 						"source": [
 							"processed_df = (\n",
 							"    manifest_df\n",
@@ -1499,7 +1611,7 @@
 							")"
 						],
 						"outputs": [],
-						"execution_count": 67
+						"execution_count": 113
 					},
 					{
 						"cell_type": "code",
@@ -1521,11 +1633,10 @@
 							"display(eligible_df)"
 						],
 						"outputs": [],
-						"execution_count": 68
+						"execution_count": 114
 					},
 					{
 						"cell_type": "code",
-						"metadata": {},
 						"source": [
 							"total = inventory_df.count()\n",
 							"eligible = eligible_df.count()\n",
@@ -1535,11 +1646,10 @@
 							"print(\"Skipped files:\", total - eligible)"
 						],
 						"outputs": [],
-						"execution_count": 69
+						"execution_count": 115
 					},
 					{
 						"cell_type": "code",
-						"metadata": {},
 						"source": [
 							"dataset_lookup = {\n",
 							"    d[\"dataset_id\"]: d for d in datasets\n",
@@ -1570,16 +1680,15 @@
 							"print(json.dumps(work_items, indent=2))"
 						],
 						"outputs": [],
-						"execution_count": 70
+						"execution_count": 116
 					},
 					{
 						"cell_type": "code",
-						"metadata": {},
 						"source": [
 							"mssparkutils.notebook.exit(json.dumps(work_items))"
 						],
 						"outputs": [],
-						"execution_count": 71
+						"execution_count": 117
 					}
 				]
 			},
